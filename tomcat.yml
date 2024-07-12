@@ -1,0 +1,68 @@
+---
+- name: Setup Apache Tomcat
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create /home2 mount point on / partition
+      file:
+        path: /home2
+        state: directory
+
+    - name: Download Apache Tomcat
+      get_url:
+        url: "http://archive.apache.org/dist/tomcat/tomcat-8/v8.0.9/bin/apache-tomcat-8.0.9.tar.gz"
+        dest: /tmp/apache-tomcat-8.0.9.tar.gz
+        timeout: 60
+      register: tomcat_download
+      until: tomcat_download is succeeded
+      retries: 3
+      delay: 10
+
+    # Add the rest of your tasks here
+    - name: Extract Apache Tomcat
+      unarchive:
+        src: /tmp/apache-tomcat-8.0.9.tar.gz
+        dest: /home2
+        creates: /home2/apache-tomcat-8.0.9
+        remote_src: yes
+      register: tomcat_extract
+      when: tomcat_download is succeeded
+
+    - name: Rename Tomcat directory
+      command: mv /home2/apache-tomcat-8.0.9 /home2/tomcat
+      when: tomcat_extract.changed
+
+    - name: Remove Apache Tomcat archive
+      file:
+        path: /tmp/apache-tomcat-8.0.9.tar.gz
+        state: absent
+
+    - name: Start Tomcat
+      command: /home2/tomcat/bin/catalina.sh start
+      async: 45
+      poll: 0
+      become_user: root
+      ignore_errors: yes
+
+    - name: Check if Tomcat is running
+      shell: ps -ef | grep tomcat | grep -v grep
+      register: tomcat_process
+      ignore_errors: yes
+
+    - name: Add entries to ~/.bashrc for Tomcat
+      blockinfile:
+        path: ~/.bashrc
+        block: |
+          alias catout='tail -100f /home2/tomcat/logs/catalina.out'
+          export CATALINA_HOME=/home2/tomcat
+          export CATALINA_BASE=$CATALINA_HOME
+          export CATALINA_OPTS="-Xms512M -Xmx4096M -XX:MaxPermSize=512M -XX:+UseParallelGC"
+          ulimit -n 10000
+        create: yes
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+      become_user: "{{ ansible_user }}"
+      when: tomcat_process.stdout | length > 0
+
+    - name: Print completion message
+      debug:
+        msg: "Apache Tomcat setup completed successfully"
