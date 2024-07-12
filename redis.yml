@@ -1,0 +1,93 @@
+- name: Setup and Compile Redis
+  hosts: all
+  become: yes
+  vars:
+    ansible_become_method: sudo  # Ensure Ansible uses sudo for privilege escalation
+  tasks:
+    - name: Ensure required packages are installed
+      apt:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - build-essential
+        - tcl
+
+    - name: Ensure /home2 directory exists
+      file:
+        path: /home2
+        state: directory
+        owner: nishchay  # Replace with appropriate owner
+        group: nishchay  # Replace with appropriate group
+        mode: '0755'
+
+    - name: Extract Redis tarball
+      ansible.builtin.unarchive:
+        src: /home2/redis-3.0.7.tar.gz
+        dest: /home2
+        remote_src: yes
+        creates: /home2/redis-3.0.7
+
+    - name: Rename Redis directory
+      command: mv /home2/redis-3.0.7 /home2/redis
+      args:
+        creates: /home2/redis
+
+    - name: Compile Redis
+      shell: |
+        cd /home2/redis
+        make clean
+        make
+        make test
+        make install
+      args:
+        executable: /bin/bash
+
+    - name: Remove existing Redis binaries if they exist
+      file:
+        path: "/usr/bin/{{ item }}"
+        state: absent
+      with_items:
+        - redis-server
+        - redis-cli
+
+    - name: Create symbolic links for Redis binaries
+      file:
+        src: "/home2/redis/src/{{ item }}"
+        dest: "/usr/bin/{{ item }}"
+        state: link
+      with_items:
+        - redis-server
+        - redis-cli
+
+    - name: Create directories for Redis data and logs
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: redis
+        group: redis
+        mode: '0755'
+      with_items:
+        - /var/log/redis
+        - /home2/redis/6379
+        - /home2/redis/6378
+
+    - name: Run install_server.sh for Redis instance
+      shell: |
+        cd /home2/redis/utils
+        echo -e "6379\n/etc/redis/redis_6379.conf\n/var/log/redis/redis_6379.log\n/home2/redis/6379\n/usr/bin/redis-server" | ./install_server.sh
+      args:
+        executable: /bin/bash
+      environment:
+        TERM: xterm
+
+    - name: Configure Redis slaveof and bind in redis_6379.conf
+      lineinfile:
+        path: /etc/redis/redis_6379.conf
+        line: "{{ item }}"
+        insertafter: EOF
+      with_items:
+        - "save 9001"
+        - "save 300 10"
+        - "save 60 10000"
+        - "slaveof 192.168.1.52 6378"
+        - "bind 127.0.0.1"
