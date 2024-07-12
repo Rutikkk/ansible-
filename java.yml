@@ -1,0 +1,74 @@
+---
+- name: Install Java on remote servers
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Create directory for Java
+      file:
+        path: /opt/java
+        state: directory
+
+    - name: Download Java package
+      shell: >
+        wget -c --header "Cookie: oraclelicense=accept-securebackup-cookie"
+        -O /opt/java/jdk-8u131-linux-x64.tar.gz
+        "http://download.oracle.com/otn-pub/java/jdk/8u131-b11/d54c1d3a095b4ff2b6607d096fa80163/jdk-8u131-linux-x64.tar.gz"
+
+    - name: Extract Java package
+      unarchive:
+        src: /opt/java/jdk-8u131-linux-x64.tar.gz
+        dest: /opt/java
+        remote_src: yes
+
+    - name: Update alternatives for java
+      alternatives:
+        name: java
+        link: /usr/bin/java
+        path: /opt/java/jdk1.8.0_131/bin/java
+        priority: 100
+
+    - name: Update alternatives for javac
+      alternatives:
+        name: javac
+        link: /usr/bin/javac
+        path: /opt/java/jdk1.8.0_131/bin/javac
+        priority: 100
+
+    - name: Update alternatives for jar
+      alternatives:
+        name: jar
+        link: /usr/bin/jar
+        path: /opt/java/jdk1.8.0_131/bin/jar
+        priority: 100
+
+    - name: Set Java environment variables in .bashrc
+      lineinfile:
+        path: /home/nishchay/.bashrc
+        state: present
+        regexp: '^export JAVA_HOME='
+        line: 'export JAVA_HOME=/opt/java/jdk1.8.0_131'
+      become_user: nishchay
+
+    - name: Set JRE environment variables in .bashrc
+      lineinfile:
+        path: /home/nishchay/.bashrc
+        state: present
+        regexp: '^export JRE_HOME='
+        line: 'export JRE_HOME=/opt/java/jdk1.8.0_131'
+      become_user: nishchay
+
+    - name: Source .bashrc to apply environment variables
+      shell: "source /home/nishchay/.bashrc"
+      args:
+        executable: /bin/bash
+      become_user: nishchay
+
+    - name: Check Java version
+      command: java -version
+      register: java_version_output
+      ignore_errors: yes
+
+    - name: Debug Java version
+      debug:
+        var: java_version_output.stdout
