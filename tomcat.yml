@@ -28,9 +28,9 @@
       register: tomcat_extract
       when: tomcat_download is succeeded
 
-    - name: Rename Tomcat directory
-      command: mv /home2/apache-tomcat-8.0.9 /home2/tomcat
-      when: tomcat_extract.changed
+    #- name: Rename Tomcat directory
+    #  command: mv /home2/apache-tomcat-8.0.9 /home2/tomcat
+    #  when: tomcat_extract.changed
 
     - name: Remove Apache Tomcat archive
       file:
